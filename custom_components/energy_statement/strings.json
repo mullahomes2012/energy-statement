@@ -1,0 +1,373 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up utility statements",
+        "description": "One entry per property. You can add gas and water later from Configure.",
+        "data": {
+          "title": "Name for this property",
+          "kind": "First supply",
+          "source": "Readings come from"
+        },
+        "data_description": {
+          "title": "Used for the device and notifications, for example 'Flat 2'."
+        }
+      },
+      "supply": {
+        "title": "{supply} supply",
+        "description": "Prices as on the landlord's bill. All amounts include VAT; VAT isn't shown on the statement.",
+        "data": {
+          "name": "Name on the statement",
+          "sensor": "Meter sensor",
+          "unit": "Meter reads in",
+          "unit_rate": "Unit rate",
+          "cf": "Gas volume correction factor",
+          "cv": "Gas calorific value",
+          "clean_rate": "Clean water rate",
+          "waste_rate": "Wastewater rate",
+          "waste_pct": "Wastewater charged on",
+          "charge_standing": "Charge a standing charge",
+          "standing": "Standing charge",
+          "effective_from": "Prices effective from",
+          "initial_reading": "Opening meter reading (optional)",
+          "initial_reading_date": "Opening reading date",
+          "monthly": "Fixed charge per month"
+        },
+        "data_description": {
+          "sensor": "The meter's total (cumulative) sensor, for example the Shelly EM1 total energy sensor.",
+          "unit": "Most UK gas meters read in m³. Smart meters that report kWh need no conversion.",
+          "unit_rate": "From the landlord's bill, including VAT.",
+          "cf": "Shown on the gas bill; usually 1.02264.",
+          "cv": "Shown on the gas bill; usually around 39 to 40 MJ/m³.",
+          "clean_rate": "Price per m³ from the water bill.",
+          "waste_rate": "Price per m³ from the water bill. Set to 0 if not charged.",
+          "waste_pct": "Most water companies charge wastewater on 95% or 100% of water used.",
+          "standing": "Daily charge from the bill, including VAT. Only used when the switch above is on.",
+          "effective_from": "If you change any price, the new price applies from this date. Earlier days keep the old price.",
+          "initial_reading": "The reading billing starts from. You can also add readings later on the device page.",
+          "monthly": "Charged in full for a whole month. A part month is charged by days, for example 10 of 30 days."
+        }
+      },
+      "schedule": {
+        "title": "Schedule and sending",
+        "data": {
+          "cycle": "Billing cycle",
+          "start_day": "Period starts on day of month",
+          "start_weekday": "Weekly period starts on",
+          "send_time": "Send at",
+          "sending_mode": "Sending",
+          "notify_service": "Phone to notify",
+          "billing_start": "Billing starts on"
+        },
+        "data_description": {
+          "start_day": "Monthly and quarterly cycles only (1 to 28).",
+          "start_weekday": "Weekly cycle only.",
+          "send_time": "The statement is created at this time on the day after the period ends.",
+          "notify_service": "Used for approval requests and meter reading requests. Leave blank for Home Assistant notifications only.",
+          "billing_start": "First day to bill, for example the tenancy start date. The first statement covers from this day to the end of that period. Changing it later restarts billing from the new date."
+        }
+      },
+      "people": {
+        "title": "People and property",
+        "data": {
+          "address": "Property address",
+          "reference_prefix": "Statement reference prefix",
+          "landlord_name": "Landlord name",
+          "landlord_email": "Landlord email",
+          "tenant_name": "Tenant name",
+          "tenant_email": "Tenant email"
+        },
+        "data_description": {
+          "reference_prefix": "Optional, for example FLAT2 gives FLAT2-0001.",
+          "tenant_email": "The statement is sent to the tenant with the landlord copied in."
+        }
+      },
+      "payment": {
+        "title": "Payment details",
+        "description": "Shown on the statement so the tenant knows how to pay.",
+        "data": {
+          "pay_within_days": "Pay within",
+          "account_name": "Account name",
+          "sort_code": "Sort code",
+          "account_number": "Account number",
+          "note": "Extra note (optional)"
+        },
+        "data_description": {
+          "pay_within_days": "Set to 0 to leave the due date off the statement.",
+          "note": "Shown under the payment details, for example 'Please use the reference so the payment can be matched.'"
+        }
+      },
+      "email": {
+        "title": "Email sending",
+        "description": "The mailbox statements are sent from.",
+        "data": {
+          "smtp_host": "SMTP server",
+          "smtp_port": "Port",
+          "smtp_security": "Security",
+          "smtp_username": "Username",
+          "smtp_password": "Password",
+          "from_email": "From address",
+          "from_name": "From name",
+          "reply_to": "Reply-to address",
+          "test_email_to": "Send a test email to (optional)"
+        },
+        "data_description": {
+          "from_email": "Leave blank to use the username.",
+          "reply_to": "Replies from the tenant go here. Usually the landlord.",
+          "smtp_password": "For Gmail or Google Workspace use an app password.",
+          "test_email_to": "If filled in, a test email is sent when you submit. Otherwise only the login is checked."
+        }
+      }
+    },
+    "error": {
+      "sensor_missing": "That sensor doesn't exist.",
+      "not_metered": "This sensor has no long-term statistics. Pick a total or cumulative meter sensor.",
+      "wrong_unit_energy": "This sensor isn't in energy units (kWh). Pick a different sensor or meter unit.",
+      "wrong_unit_volume": "This sensor isn't in volume units (m³). Pick a different sensor or meter unit.",
+      "invalid_email": "Enter a valid email address.",
+      "invalid_sort_code": "Enter a 6-digit sort code, for example 12-34-56.",
+      "invalid_account": "Enter an 8-digit account number.",
+      "from_needed": "Enter a from address, or use an email address as the username.",
+      "smtp_failed": "Email didn't work: {smtp_error}",
+      "confirm_needed": "Tick the box to confirm."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Configure",
+        "description": "Supplies: {supplies}",
+        "menu_options": {
+          "edit_supply": "Edit a supply and its prices",
+          "add_supply": "Add supply (gas or water)",
+          "remove_supply": "Remove a supply",
+          "schedule": "Schedule and sending",
+          "people": "People and property",
+          "payment": "Payment details",
+          "email": "Email sending"
+        }
+      },
+      "edit_supply": {
+        "title": "Edit a supply",
+        "data": {
+          "supply": "Supply"
+        }
+      },
+      "add_supply": {
+        "title": "Add a supply",
+        "data": {
+          "kind": "Supply",
+          "source": "Readings come from"
+        }
+      },
+      "remove_supply": {
+        "title": "Remove a supply",
+        "description": "Readings already entered are kept in case you add it back.",
+        "data": {
+          "supply": "Supply",
+          "confirm": "Yes, remove it"
+        }
+      },
+      "supply": {
+        "title": "{supply} supply",
+        "description": "Prices as on the landlord's bill. All amounts include VAT; VAT isn't shown on the statement.",
+        "data": {
+          "name": "Name on the statement",
+          "sensor": "Meter sensor",
+          "unit": "Meter reads in",
+          "unit_rate": "Unit rate",
+          "cf": "Gas volume correction factor",
+          "cv": "Gas calorific value",
+          "clean_rate": "Clean water rate",
+          "waste_rate": "Wastewater rate",
+          "waste_pct": "Wastewater charged on",
+          "charge_standing": "Charge a standing charge",
+          "standing": "Standing charge",
+          "effective_from": "Prices effective from",
+          "initial_reading": "Opening meter reading (optional)",
+          "initial_reading_date": "Opening reading date",
+          "monthly": "Fixed charge per month"
+        },
+        "data_description": {
+          "sensor": "The meter's total (cumulative) sensor, for example the Shelly EM1 total energy sensor.",
+          "unit": "Most UK gas meters read in m³. Smart meters that report kWh need no conversion.",
+          "unit_rate": "From the landlord's bill, including VAT.",
+          "cf": "Shown on the gas bill; usually 1.02264.",
+          "cv": "Shown on the gas bill; usually around 39 to 40 MJ/m³.",
+          "clean_rate": "Price per m³ from the water bill.",
+          "waste_rate": "Price per m³ from the water bill. Set to 0 if not charged.",
+          "waste_pct": "Most water companies charge wastewater on 95% or 100% of water used.",
+          "standing": "Daily charge from the bill, including VAT. Only used when the switch above is on.",
+          "effective_from": "If you change any price, the new price applies from this date. Earlier days keep the old price.",
+          "initial_reading": "The reading billing starts from. You can also add readings later on the device page.",
+          "monthly": "Charged in full for a whole month. A part month is charged by days, for example 10 of 30 days."
+        }
+      },
+      "schedule": {
+        "title": "Schedule and sending",
+        "data": {
+          "cycle": "Billing cycle",
+          "start_day": "Period starts on day of month",
+          "start_weekday": "Weekly period starts on",
+          "send_time": "Send at",
+          "sending_mode": "Sending",
+          "notify_service": "Phone to notify",
+          "billing_start": "Billing starts on"
+        },
+        "data_description": {
+          "start_day": "Monthly and quarterly cycles only (1 to 28).",
+          "start_weekday": "Weekly cycle only.",
+          "send_time": "The statement is created at this time on the day after the period ends.",
+          "notify_service": "Used for approval requests and meter reading requests. Leave blank for Home Assistant notifications only.",
+          "billing_start": "First day to bill, for example the tenancy start date. The first statement covers from this day to the end of that period. Changing it later restarts billing from the new date."
+        }
+      },
+      "people": {
+        "title": "People and property",
+        "data": {
+          "address": "Property address",
+          "reference_prefix": "Statement reference prefix",
+          "landlord_name": "Landlord name",
+          "landlord_email": "Landlord email",
+          "tenant_name": "Tenant name",
+          "tenant_email": "Tenant email"
+        },
+        "data_description": {
+          "reference_prefix": "Optional, for example FLAT2 gives FLAT2-0001.",
+          "tenant_email": "The statement is sent to the tenant with the landlord copied in."
+        }
+      },
+      "payment": {
+        "title": "Payment details",
+        "description": "Shown on the statement so the tenant knows how to pay.",
+        "data": {
+          "pay_within_days": "Pay within",
+          "account_name": "Account name",
+          "sort_code": "Sort code",
+          "account_number": "Account number",
+          "note": "Extra note (optional)"
+        },
+        "data_description": {
+          "pay_within_days": "Set to 0 to leave the due date off the statement.",
+          "note": "Shown under the payment details, for example 'Please use the reference so the payment can be matched.'"
+        }
+      },
+      "email": {
+        "title": "Email sending",
+        "description": "The mailbox statements are sent from.",
+        "data": {
+          "smtp_host": "SMTP server",
+          "smtp_port": "Port",
+          "smtp_security": "Security",
+          "smtp_username": "Username",
+          "smtp_password": "Password",
+          "from_email": "From address",
+          "from_name": "From name",
+          "reply_to": "Reply-to address",
+          "test_email_to": "Send a test email to (optional)"
+        },
+        "data_description": {
+          "from_email": "Leave blank to use the username.",
+          "reply_to": "Replies from the tenant go here. Usually the landlord.",
+          "smtp_password": "For Gmail or Google Workspace use an app password.",
+          "test_email_to": "If filled in, a test email is sent when you submit. Otherwise only the login is checked."
+        }
+      }
+    },
+    "error": {
+      "sensor_missing": "That sensor doesn't exist.",
+      "not_metered": "This sensor has no long-term statistics. Pick a total or cumulative meter sensor.",
+      "wrong_unit_energy": "This sensor isn't in energy units (kWh). Pick a different sensor or meter unit.",
+      "wrong_unit_volume": "This sensor isn't in volume units (m³). Pick a different sensor or meter unit.",
+      "invalid_email": "Enter a valid email address.",
+      "invalid_sort_code": "Enter a 6-digit sort code, for example 12-34-56.",
+      "invalid_account": "Enter an 8-digit account number.",
+      "from_needed": "Enter a from address, or use an email address as the username.",
+      "smtp_failed": "Email didn't work: {smtp_error}",
+      "confirm_needed": "Tick the box to confirm."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "state": {
+          "idle": "Idle",
+          "waiting_for_readings": "Waiting for readings",
+          "awaiting_approval": "Awaiting approval"
+        }
+      }
+    }
+  },
+  "services": {
+    "create_statement": {
+      "name": "Create statement for dates",
+      "description": "Create a one-off statement, for example when a tenant moves in or out. Follows the sending setting.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Property",
+          "description": "The Energy Statement entry."
+        },
+        "start_date": {
+          "name": "Start date",
+          "description": "First day included."
+        },
+        "end_date": {
+          "name": "End date",
+          "description": "Last day included."
+        }
+      }
+    },
+    "preview_statement": {
+      "name": "Preview statement",
+      "description": "Make a preview PDF of the current period so far. Nothing is sent.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Property",
+          "description": "The Energy Statement entry."
+        }
+      }
+    },
+    "approve_statement": {
+      "name": "Approve and send statement",
+      "description": "Send the statement waiting for approval.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Property",
+          "description": "The Energy Statement entry."
+        }
+      }
+    },
+    "discard_statement": {
+      "name": "Discard statement",
+      "description": "Discard the pending statement. A regular period is skipped.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Property",
+          "description": "The Energy Statement entry."
+        }
+      }
+    },
+    "add_meter_reading": {
+      "name": "Add meter reading",
+      "description": "Save a manual reading for a gas or water supply.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Property",
+          "description": "The Energy Statement entry."
+        },
+        "supply": {
+          "name": "Supply",
+          "description": "Which supply."
+        },
+        "reading": {
+          "name": "Reading",
+          "description": "The number on the meter."
+        },
+        "reading_date": {
+          "name": "Reading date",
+          "description": "Leave blank for now."
+        }
+      }
+    }
+  }
+}

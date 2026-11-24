@@ -1,0 +1,63 @@
+create_statement:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: energy_statement
+    start_date:
+      required: true
+      selector:
+        date:
+    end_date:
+      required: true
+      selector:
+        date:
+preview_statement:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: energy_statement
+approve_statement:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: energy_statement
+discard_statement:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: energy_statement
+add_meter_reading:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: energy_statement
+    supply:
+      required: true
+      selector:
+        select:
+          options:
+            - electricity
+            - gas
+            - water
+    reading:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100000000
+          step: 0.001
+          mode: box
+    reading_date:
+      required: false
+      selector:
+        date:

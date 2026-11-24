@@ -1,0 +1,14 @@
+{
+  "domain": "energy_statement",
+  "name": "Energy Statement",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": ["http", "recorder"],
+  "after_dependencies": ["mobile_app", "notify", "persistent_notification"],
+  "documentation": "https://github.com/mullahomes2012/energy-statement",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/mullahomes2012/energy-statement/issues",
+  "requirements": ["fpdf2==2.8.3"],
+  "version": "1.1.0"
+}
