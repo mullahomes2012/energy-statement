@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 DOMAIN = "energy_statement"
-VERSION = "1.2.3"
+VERSION = "1.2.4"
 
 # Supply kinds
 KIND_ELECTRICITY = "electricity"

@@ -37,81 +37,80 @@ def _connect_ipv4_first(host: str, port: int, timeout: float, source_address=Non
     raise last_error or OSError(f"Couldn't find an address for {host}")
 
 
-def _hostname_matches(cert: dict, host: str) -> bool:
-    """Does the certificate cover this host name (including *.wildcards)?"""
-    host = host.lower().rstrip(".")
-    for kind, name in cert.get("subjectAltName", ()):
-        if kind != "DNS":
-            continue
-        name = name.lower()
-        if name == host:
-            return True
-        if name.startswith("*.") and "." in host and host.split(".", 1)[1] == name[2:]:
-            return True
-    return False
+def lookup_dns_over_https(host: str) -> list[str]:
+    """IPv4 addresses for host from Cloudflare or Google DNS-over-HTTPS.
 
-
-def _verify_host(sock: ssl.SSLSocket, host: str) -> None:
-    """Check the certificate names the server we meant to reach.
-
-    Used when connecting without SNI: the certificate chain is still verified
-    by the SSL context; this adds the host name check that SNI mode skips.
+    Used when the network's own DNS sends mail servers to the wrong place
+    (some routers and filters answer for gmail/outlook with an address that
+    cuts encrypted connections). DNS-over-HTTPS can't be redirected that way.
     """
-    cert = sock.getpeercert()
-    if not cert or not _hostname_matches(cert, host):
-        raise ssl.SSLCertVerificationError(f"certificate is not valid for {host}")
+    import json
+    import urllib.parse
+    import urllib.request
+
+    name = urllib.parse.quote(host.strip().rstrip("."))
+    for url in (
+        f"https://cloudflare-dns.com/dns-query?name={name}&type=A",
+        f"https://dns.google/resolve?name={name}&type=A",
+    ):
+        try:
+            request = urllib.request.Request(url, headers={"accept": "application/dns-json"})
+            with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310
+                data = json.loads(response.read().decode())
+            addresses = [a["data"] for a in data.get("Answer", []) if a.get("type") == 1]
+            if addresses:
+                return addresses
+        except (OSError, ValueError):
+            continue
+    return []
+
+
+def _connect_to(addresses: list[str] | None, host: str, port: int, timeout: float, source_address=None) -> socket.socket:
+    if not addresses:
+        return _connect_ipv4_first(host, port, timeout, source_address)
+    last_error: OSError | None = None
+    for address in addresses:
+        try:
+            return socket.create_connection((address, port), timeout, source_address)
+        except OSError as err:
+            last_error = err
+    raise last_error or OSError(f"Couldn't connect to {host}")
 
 
 class _SMTP(smtplib.SMTP):
-    def __init__(self, *args, no_sni: bool = False, **kwargs):
-        self.no_sni = no_sni
+    def __init__(self, *args, addresses: list[str] | None = None, **kwargs):
+        self.addresses = addresses
         super().__init__(*args, **kwargs)
 
     def _get_socket(self, host, port, timeout):
-        return _connect_ipv4_first(host, port, timeout, self.source_address)
-
-    def starttls(self, *, context=None):
-        if not self.no_sni:
-            return super().starttls(context=context)
-        host = self._host
-        self._host = None  # wrap without announcing the server name
-        try:
-            reply = super().starttls(context=context)
-        finally:
-            self._host = host
-        _verify_host(self.sock, host)
-        return reply
+        return _connect_to(self.addresses, host, port, timeout, self.source_address)
 
 
 class _SMTP_SSL(smtplib.SMTP_SSL):
-    def __init__(self, *args, no_sni: bool = False, **kwargs):
-        self.no_sni = no_sni
+    def __init__(self, *args, addresses: list[str] | None = None, **kwargs):
+        self.addresses = addresses
         super().__init__(*args, **kwargs)
 
     def _get_socket(self, host, port, timeout):
-        sock = _connect_ipv4_first(host, port, timeout, self.source_address)
-        if not self.no_sni:
-            return self.context.wrap_socket(sock, server_hostname=self._host)
-        wrapped = self.context.wrap_socket(sock, server_hostname=None)
-        _verify_host(wrapped, host)
-        return wrapped
+        sock = _connect_to(self.addresses, host, port, timeout, self.source_address)
+        # The server name is still sent and the certificate fully checked
+        # against it, so this is exactly as secure as a normal connection.
+        return self.context.wrap_socket(sock, server_hostname=self._host)
 
 
 class MailError(Exception):
     """Sending failed; message is safe to show to the user."""
 
 
-def _open(cfg: dict, no_sni: bool) -> smtplib.SMTP:
+def _open(cfg: dict, addresses: list[str] | None) -> smtplib.SMTP:
     host = cfg["smtp_host"].strip()
     port = int(cfg["smtp_port"])
     security = cfg.get("smtp_security", SECURITY_STARTTLS)
     context = ssl.create_default_context()
-    if no_sni:
-        context.check_hostname = False  # checked by _verify_host instead
     if security == SECURITY_SSL:
-        server: smtplib.SMTP = _SMTP_SSL(host, port, timeout=TIMEOUT, context=context, no_sni=no_sni)
+        server: smtplib.SMTP = _SMTP_SSL(host, port, timeout=TIMEOUT, context=context, addresses=addresses)
     else:
-        server = _SMTP(host, port, timeout=TIMEOUT, no_sni=no_sni)
+        server = _SMTP(host, port, timeout=TIMEOUT, addresses=addresses)
         server.ehlo()
         if security == SECURITY_STARTTLS:
             server.starttls(context=context)
@@ -122,16 +121,16 @@ def _open(cfg: dict, no_sni: bool) -> smtplib.SMTP:
 
 
 def _connect(cfg: dict) -> smtplib.SMTP:
-    """Connect and log in. If the connection is cut off as encryption starts
-    (some networks block big mail providers by name), try once more without
-    announcing the server name."""
+    """Connect and log in. If the connection is cut off as encryption starts,
+    look the server up with DNS-over-HTTPS and try again at that address."""
     try:
         try:
-            return _open(cfg, no_sni=False)
-        except (smtplib.SMTPServerDisconnected, ssl.SSLError, ConnectionResetError):
-            if cfg.get("smtp_security", SECURITY_STARTTLS) == SECURITY_NONE:
-                raise
-            return _open(cfg, no_sni=True)
+            return _open(cfg, None)
+        except (smtplib.SMTPServerDisconnected, smtplib.SMTPNotSupportedError, ssl.SSLError, ConnectionResetError) as first:
+            addresses = lookup_dns_over_https(cfg["smtp_host"])
+            if not addresses:
+                raise first
+            return _open(cfg, addresses)
     except smtplib.SMTPAuthenticationError as err:
         raise MailError("The mail server rejected the username or password.") from err
     except ssl.SSLCertVerificationError as err:
