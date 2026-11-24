@@ -632,7 +632,7 @@ class StatementManager:
         body = f"{statement['reference']} for {period}: {fmt_money(statement['total'])}."
         persistent_notification.async_create(
             self.hass,
-            body + f"\n\n[Open the PDF to print]({link})",
+            body + f"\n\n{_pdf_anchor(link, 'Open the PDF to print')}",
             title=title,
             notification_id=self._nid("print"),
         )
@@ -683,7 +683,7 @@ class StatementManager:
         persistent_notification.async_create(
             self.hass,
             f"{fmt_range(start, date.fromisoformat(statement['end']))} so far: "
-            f"**{fmt_money(statement['total'])}**.\n\n[Open the preview PDF]({link}){extra}",
+            f"**{fmt_money(statement['total'])}**.\n\n{_pdf_anchor(link, 'Open the preview PDF')}{extra}",
             title=f"{self.entry.title}: statement preview",
             notification_id=self._nid("preview"),
         )
@@ -789,7 +789,7 @@ class StatementManager:
         )
         persistent_notification.async_create(
             self.hass,
-            body + f"\n\n[Open the PDF]({link})\n\nOn the device page: *Approve and send* to email it, "
+            body + f"\n\n{_pdf_anchor(link, 'Open the PDF')}\n\nOn the device page: *Approve and send* to email it, "
             "*Mark as handed over* if you've printed it instead, or *Discard*.",
             title=title,
             notification_id=self._nid("approval"),
@@ -928,6 +928,12 @@ class StatementManager:
             any_cost = True
         out["total_cost"] = float(total) if any_cost else None
         return out
+
+
+def _pdf_anchor(link: str, text: str) -> str:
+    """Link that opens in a new tab. HA's front end swallows clicks on plain
+    same-site links (it treats them as pages inside HA), so they'd do nothing."""
+    return f'<a href="{html_lib.escape(link, quote=True)}" target="_blank">{text}</a>'
 
 
 def _when(moment: datetime) -> str:
