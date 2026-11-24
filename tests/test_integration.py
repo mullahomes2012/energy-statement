@@ -86,24 +86,43 @@ async def test_config_flow(recorder_mock, hass: HomeAssistant):
     assert r["step_id"] == "schedule", r.get("errors")
     r = await hass.config_entries.flow.async_configure(r["flow_id"], {
         "cycle": "monthly", "start_day": 1, "start_weekday": "0", "send_time": "09:00:00", "sending_mode": "approve"})
-    assert r["step_id"] == "people"
-    r = await hass.config_entries.flow.async_configure(r["flow_id"], {**BASE_OPTS["people"], "tenant_email": "bad"})
+    assert r["type"] == "create_entry", r   # setup finishes after the schedule
+    entry_id = r["result"].entry_id
+    await hass.async_block_till_done()
+    m = hass.data[DOMAIN][entry_id]
+    assert m.missing_setup() == ["tenant's email (People and property)", "email sending (Email sending)"]
+
+    # People: partial details are fine, bad email isn't
+    r = await hass.config_entries.options.async_init(entry_id)
+    r = await hass.config_entries.options.async_configure(r["flow_id"], {"next_step_id": "people"})
+    r = await hass.config_entries.options.async_configure(r["flow_id"], {"tenant_name": "Ms B. Tenant", "tenant_email": "bad"})
     assert r["errors"] == {"tenant_email": "invalid_email"}
-    r = await hass.config_entries.flow.async_configure(r["flow_id"], BASE_OPTS["people"])
-    assert r["step_id"] == "payment"
-    r = await hass.config_entries.flow.async_configure(r["flow_id"], {"pay_within_days": 14, "account_name": "A", "sort_code": "123456", "account_number": "12345678"})
-    assert r["step_id"] == "email", r.get("errors")
+    r = await hass.config_entries.options.async_configure(r["flow_id"], BASE_OPTS["people"])
+    assert r["type"] == "create_entry"
+    await hass.async_block_till_done()
+    # Payment
+    r = await hass.config_entries.options.async_init(entry_id)
+    r = await hass.config_entries.options.async_configure(r["flow_id"], {"next_step_id": "payment"})
+    r = await hass.config_entries.options.async_configure(r["flow_id"], {"pay_within_days": 14, "account_name": "A", "sort_code": "123456", "account_number": "12345678"})
+    assert r["type"] == "create_entry", r.get("errors")
+    await hass.async_block_till_done()
+    # Email
+    r = await hass.config_entries.options.async_init(entry_id)
+    r = await hass.config_entries.options.async_configure(r["flow_id"], {"next_step_id": "email"})
     with patch("custom_components.energy_statement.config_flow.test_connection") as tc:
-        r = await hass.config_entries.flow.async_configure(r["flow_id"], {k: v for k, v in BASE_OPTS["email"].items()})
+        r = await hass.config_entries.options.async_configure(r["flow_id"], dict(BASE_OPTS["email"]))
         assert tc.called
     assert r["type"] == "create_entry", r
+    await hass.async_block_till_done()
+    r = {"result": hass.config_entries.async_get_entry(entry_id)}
+    assert hass.data[DOMAIN][entry_id].missing_setup() == []
     opts = r["result"].options
     assert opts["payment"]["sort_code"] == "12-34-56"
     assert opts["supplies"]["electricity"]["prices"] == [{"from": "2026-10-01", "unit_rate": 27.5, "standing": 53.0}]
     await hass.async_block_till_done()
 
     # Options: add a manual water supply through the menu
-    r = await hass.config_entries.options.async_init(r["result"].entry_id)
+    r = await hass.config_entries.options.async_init(entry_id)
     assert r["type"] == "menu" and "add_supply" in r["menu_options"]
     r = await hass.config_entries.options.async_configure(r["flow_id"], {"next_step_id": "add_supply"})
     r = await hass.config_entries.options.async_configure(r["flow_id"], {"kind": "water", "source": "manual"})
@@ -344,3 +363,44 @@ async def test_v11_billing_start_offline_fixed_water_manual_gas(recorder_mock, h
 
     from custom_components.energy_statement.pdf import render_pdf
     open("/tmp/v11_statement.pdf", "wb").write(render_pdf(st, m.people, m.payment))
+
+
+async def test_statement_waits_until_email_is_set_up(recorder_mock, hass: HomeAssistant, freezer):
+    opts = {**BASE_OPTS, "people": {}, "payment": {}, "email": {},
+            "schedule": {**BASE_OPTS["schedule"], "sending_mode": "auto", "billing_start": "2026-10-01"}}
+    entry, m = await _setup(hass, opts, freezer, local(2026, 11, 1, 8, 0))
+    await _import_hourly(hass, local(2026, 9, 30, 23), 24 * 31 + 2, lambda h: 0.0 if h == 0 else 0.5, 100)
+    freezer.move_to(local(2026, 11, 1, 9, 0, 5))
+    with patch("custom_components.energy_statement.manager.send_mail") as sm:
+        await m.async_check()
+        assert not sm.called
+    pending = m.data["pending"]
+    assert pending["status"] == STATUS_APPROVAL
+    assert "Not set up for email yet" in pending["statement"]["error"]
+    with pytest.raises(Exception, match="Add these in Configure first"):
+        await m.async_approve()
+
+    # Printed instead: close it without email
+    await hass.services.async_call("button", "press", {"entity_id": "button.flat_2_mark_statement_as_handed_over"}, blocking=True)
+    await hass.async_block_till_done()
+    assert m.data["pending"] is None
+    assert m.data["last"]["status"] == "handed over"
+    assert m.data["last_period_end"] == "2026-11-01"
+
+
+async def test_print_mode_needs_no_email(recorder_mock, hass: HomeAssistant, freezer):
+    opts = {**BASE_OPTS, "people": {}, "payment": {}, "email": {},
+            "schedule": {**BASE_OPTS["schedule"], "sending_mode": "manual", "billing_start": "2026-10-01"}}
+    entry, m = await _setup(hass, opts, freezer, local(2026, 11, 1, 8, 0))
+    assert m.missing_setup() == []
+    await _import_hourly(hass, local(2026, 9, 30, 23), 24 * 31 + 2, lambda h: 0.0 if h == 0 else 0.5, 100)
+    freezer.move_to(local(2026, 11, 1, 9, 0, 5))
+    with patch("custom_components.energy_statement.manager.send_mail") as sm:
+        await m.async_check()
+        assert not sm.called
+    assert m.data["pending"] is None
+    last = m.data["last"]
+    assert last["status"] == "to hand over" and last["reference"] == "0001"
+    assert os.path.exists(m.pdf_path(last["pdf"]))
+    attrs = hass.states.get("sensor.flat_2_last_statement").attributes
+    assert "authSig=" in attrs["pdf_link"]

@@ -151,6 +151,7 @@ class LastStatementSensor(StatementEntity, SensorEntity):
         attrs["supplies"] = last.get("supplies")
         if last.get("pdf"):
             attrs["pdf_path"] = f"{DOMAIN}/{self.manager.entry.entry_id}/{last['pdf']}"
+            attrs["pdf_link"] = self.manager.pdf_link(last["pdf"])
         return attrs
 
 

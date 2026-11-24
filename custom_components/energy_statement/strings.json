@@ -64,8 +64,10 @@
           "start_weekday": "Weekly cycle only.",
           "send_time": "The statement is created at this time on the day after the period ends.",
           "notify_service": "Used for approval requests and meter reading requests. Leave blank for Home Assistant notifications only.",
-          "billing_start": "First day to bill, for example the tenancy start date. The first statement covers from this day to the end of that period. Changing it later restarts billing from the new date."
-        }
+          "billing_start": "First day to bill, for example the tenancy start date. The first statement covers from this day to the end of that period. Changing it later restarts billing from the new date.",
+          "sending_mode": "With 'I'll print it', each statement is made as a PDF and you get a notification with a link to open and print it. Nothing is emailed, and no email or people details are needed."
+        },
+        "description": "Last step. Add people, payment details and email sending later from Configure; statements won't be emailed until they're filled in."
       },
       "people": {
         "title": "People and property",
@@ -80,11 +82,12 @@
         "data_description": {
           "reference_prefix": "Optional, for example FLAT2 gives FLAT2-0001.",
           "tenant_email": "The statement is sent to the tenant with the landlord copied in."
-        }
+        },
+        "description": "Fill in what you have now; you can add the rest later. The tenant's email is needed before statements can be sent."
       },
       "payment": {
         "title": "Payment details",
-        "description": "Shown on the statement so the tenant knows how to pay.",
+        "description": "Shown on the statement so the tenant knows how to pay. Optional; leave blank to add later.",
         "data": {
           "pay_within_days": "Pay within",
           "account_name": "Account name",
@@ -219,7 +222,8 @@
           "start_weekday": "Weekly cycle only.",
           "send_time": "The statement is created at this time on the day after the period ends.",
           "notify_service": "Used for approval requests and meter reading requests. Leave blank for Home Assistant notifications only.",
-          "billing_start": "First day to bill, for example the tenancy start date. The first statement covers from this day to the end of that period. Changing it later restarts billing from the new date."
+          "billing_start": "First day to bill, for example the tenancy start date. The first statement covers from this day to the end of that period. Changing it later restarts billing from the new date.",
+          "sending_mode": "With 'I'll print it', each statement is made as a PDF and you get a notification with a link to open and print it. Nothing is emailed, and no email or people details are needed."
         }
       },
       "people": {
@@ -235,11 +239,12 @@
         "data_description": {
           "reference_prefix": "Optional, for example FLAT2 gives FLAT2-0001.",
           "tenant_email": "The statement is sent to the tenant with the landlord copied in."
-        }
+        },
+        "description": "Fill in what you have now; you can add the rest later. The tenant's email is needed before statements can be sent."
       },
       "payment": {
         "title": "Payment details",
-        "description": "Shown on the statement so the tenant knows how to pay.",
+        "description": "Shown on the statement so the tenant knows how to pay. Optional; leave blank to add later.",
         "data": {
           "pay_within_days": "Pay within",
           "account_name": "Account name",

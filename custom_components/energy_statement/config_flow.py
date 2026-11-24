@@ -28,6 +28,7 @@ from .const import (
     KINDS,
     MODE_APPROVE,
     MODE_AUTO,
+    MODE_MANUAL,
     OPT_EMAIL,
     OPT_PAYMENT,
     OPT_PEOPLE,
@@ -190,7 +191,11 @@ def schedule_schema(hass: HomeAssistant, ex: dict) -> vol.Schema:
         vol.Optional("billing_start", description={"suggested_value": ex.get("billing_start")}): DATE,
         vol.Required("send_time", default=ex.get("send_time", "09:00:00")): sel.TimeSelector(),
         vol.Required("sending_mode", default=ex.get("sending_mode", MODE_APPROVE)): _select(
-            [_opt(MODE_APPROVE, "Ask me first (phone notification)"), _opt(MODE_AUTO, "Send automatically")]
+            [
+                _opt(MODE_APPROVE, "Ask me first, then email it"),
+                _opt(MODE_AUTO, "Email automatically"),
+                _opt(MODE_MANUAL, "Don't email; I'll print it and hand it over"),
+            ]
         ),
         vol.Optional("notify_service", description={"suggested_value": ex.get("notify_service")}): _select(
             [_opt(n, n) for n in notify], custom=True
@@ -212,12 +217,12 @@ def clean_schedule(ui: dict) -> dict:
 def people_schema(ex: dict) -> vol.Schema:
     return vol.Schema(
         {
-            vol.Required("address", default=ex.get("address", "")): MULTILINE,
+            vol.Optional("address", description={"suggested_value": ex.get("address")}): MULTILINE,
             vol.Optional("reference_prefix", description={"suggested_value": ex.get("reference_prefix")}): TEXT,
-            vol.Required("landlord_name", default=ex.get("landlord_name", "")): TEXT,
-            vol.Required("landlord_email", default=ex.get("landlord_email", "")): EMAIL,
-            vol.Required("tenant_name", default=ex.get("tenant_name", "")): TEXT,
-            vol.Required("tenant_email", default=ex.get("tenant_email", "")): EMAIL,
+            vol.Optional("landlord_name", description={"suggested_value": ex.get("landlord_name")}): TEXT,
+            vol.Optional("landlord_email", description={"suggested_value": ex.get("landlord_email")}): EMAIL,
+            vol.Optional("tenant_name", description={"suggested_value": ex.get("tenant_name")}): TEXT,
+            vol.Optional("tenant_email", description={"suggested_value": ex.get("tenant_email")}): EMAIL,
         }
     )
 
@@ -225,7 +230,8 @@ def people_schema(ex: dict) -> vol.Schema:
 def validate_people(ui: dict) -> dict[str, str]:
     errors = {}
     for key in ("landlord_email", "tenant_email"):
-        if not EMAIL_RE.match(ui.get(key, "").strip()):
+        value = (ui.get(key) or "").strip()
+        if value and not EMAIL_RE.match(value):
             errors[key] = "invalid_email"
     return errors
 
@@ -234,9 +240,9 @@ def payment_schema(ex: dict) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required("pay_within_days", default=ex.get("pay_within_days", 14)): _num(0, 90, 1, "days"),
-            vol.Required("account_name", default=ex.get("account_name", "")): TEXT,
-            vol.Required("sort_code", default=ex.get("sort_code", "")): TEXT,
-            vol.Required("account_number", default=ex.get("account_number", "")): TEXT,
+            vol.Optional("account_name", description={"suggested_value": ex.get("account_name")}): TEXT,
+            vol.Optional("sort_code", description={"suggested_value": ex.get("sort_code")}): TEXT,
+            vol.Optional("account_number", description={"suggested_value": ex.get("account_number")}): TEXT,
             vol.Optional("note", description={"suggested_value": ex.get("note")}): MULTILINE,
         }
     )
@@ -246,15 +252,15 @@ def validate_payment(ui: dict) -> tuple[dict[str, str], dict]:
     errors = {}
     out = dict(ui)
     out["pay_within_days"] = int(out["pay_within_days"])
-    digits = re.sub(r"[\s-]", "", ui.get("sort_code", ""))
-    if not re.fullmatch(r"\d{6}", digits):
+    digits = re.sub(r"[\s-]", "", ui.get("sort_code") or "")
+    if digits and not re.fullmatch(r"\d{6}", digits):
         errors["sort_code"] = "invalid_sort_code"
-    else:
+    elif digits:
         out["sort_code"] = f"{digits[:2]}-{digits[2:4]}-{digits[4:]}"
-    acc = re.sub(r"\s", "", ui.get("account_number", ""))
-    if not re.fullmatch(r"\d{8}", acc):
+    acc = re.sub(r"\s", "", ui.get("account_number") or "")
+    if acc and not re.fullmatch(r"\d{8}", acc):
         errors["account_number"] = "invalid_account"
-    else:
+    elif acc:
         out["account_number"] = acc
     return errors, out
 
@@ -362,47 +368,13 @@ class EnergyStatementConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_schedule(self, user_input: dict | None = None) -> ConfigFlowResult:
         if user_input is not None:
             self._opts[OPT_SCHEDULE] = clean_schedule(user_input)
-            return await self.async_step_people()
+            # People, payment and email are added later from Configure.
+            self._opts.setdefault(OPT_PEOPLE, {})
+            self._opts.setdefault(OPT_PAYMENT, {})
+            self._opts.setdefault(OPT_EMAIL, {})
+            title = self._opts.pop("title")
+            return self.async_create_entry(title=title, data={}, options=self._opts)
         return self.async_show_form(step_id="schedule", data_schema=schedule_schema(self.hass, {}))
-
-    async def async_step_people(self, user_input: dict | None = None) -> ConfigFlowResult:
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            errors = validate_people(user_input)
-            if not errors:
-                self._opts[OPT_PEOPLE] = user_input
-                return await self.async_step_payment()
-        return self.async_show_form(
-            step_id="people", data_schema=people_schema(user_input or {}), errors=errors
-        )
-
-    async def async_step_payment(self, user_input: dict | None = None) -> ConfigFlowResult:
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            errors, cleaned = validate_payment(user_input)
-            if not errors:
-                self._opts[OPT_PAYMENT] = cleaned
-                return await self.async_step_email()
-        return self.async_show_form(
-            step_id="payment", data_schema=payment_schema(user_input or {}), errors=errors
-        )
-
-    async def async_step_email(self, user_input: dict | None = None) -> ConfigFlowResult:
-        errors: dict[str, str] = {}
-        placeholders = {"smtp_error": ""}
-        landlord = self._opts[OPT_PEOPLE].get("landlord_email", "")
-        if user_input is not None:
-            errors, placeholders, cfg = await validate_email(self.hass, user_input)
-            if not errors:
-                self._opts[OPT_EMAIL] = cfg
-                title = self._opts.pop("title")
-                return self.async_create_entry(title=title, data={}, options=self._opts)
-        return self.async_show_form(
-            step_id="email",
-            data_schema=email_schema(user_input or {}, landlord),
-            errors=errors,
-            description_placeholders=placeholders,
-        )
 
 
 # ---------------------------------------------------------------- options flow

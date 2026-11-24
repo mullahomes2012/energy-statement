@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 DOMAIN = "energy_statement"
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 # Supply kinds
 KIND_ELECTRICITY = "electricity"
@@ -42,6 +42,7 @@ CYCLE_WEEKLY = "weekly"
 
 MODE_AUTO = "auto"
 MODE_APPROVE = "approve"
+MODE_MANUAL = "manual"  # print and hand over, no email
 
 SECURITY_STARTTLS = "starttls"
 SECURITY_SSL = "ssl"

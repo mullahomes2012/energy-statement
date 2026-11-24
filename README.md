@@ -21,17 +21,22 @@ Server add-on) and restart.
 
 Then go to **Settings → Devices and services → Add integration → Energy Statement**.
 
-## Setup screens
+## Setup
+
+First setup only asks for the essentials:
 
 1. **Property** – a name (e.g. *Flat 2*), the first supply and where readings come from.
 2. **Supply** – meter sensor, unit rate, standing charge on/off, prices effective from.
-3. **Schedule and sending** – cycle, start day, **billing starts on** (e.g. the tenancy start date), send time, *Ask me first* or *Send automatically*, and the phone to notify.
-4. **People and property** – address, reference prefix, landlord and tenant names and emails.
-5. **Payment details** – pay within N days, account name, sort code, account number, optional note.
-6. **Email sending** – SMTP details. Fill in *Send a test email to* to check it works.
+3. **Schedule and sending** – cycle, **billing starts on** (e.g. the tenancy start date), send time, and how statements are delivered:
+   * **Ask me first, then email it**
+   * **Email automatically**
+   * **Don't email; I'll print it and hand it over** – no email or people details needed
 
-Change anything later from the integration's **Configure** button. Gas and water
-are added there with **Add supply**.
+Everything else is added or changed any time from the integration's **Configure** button:
+people and property, payment details, email sending, prices, and adding gas or water.
+Until the tenant's email and email sending are filled in, statements are still made
+but wait for you instead of being emailed. Press **Mark statement as handed over** if
+you print one instead.
 
 ## How amounts are worked out
 
@@ -87,9 +92,9 @@ At the send time on the day after the period ends:
 | *Supply* last reading | Manual supplies, with recent readings |
 | *Supply* new reading, reading date, save reading, delete last reading | Enter manual readings |
 | Statement status | Idle, waiting for readings, awaiting approval |
-| Last statement | Amount, reference, period, sent/discarded |
+| Last statement | Amount, reference, period, status, and a link to the PDF |
 | Next statement | When the next one is due |
-| Approve and send / Discard pending | Act on a pending statement |
+| Approve and send / Mark as handed over / Discard pending | Act on a waiting statement |
 | Preview this period | Makes a preview PDF of the period so far; never emailed |
 | Custom statement start / end + Create custom statement | One-off statement for any dates (move in / move out) |
 

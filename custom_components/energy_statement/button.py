@@ -23,6 +23,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
 
     entities = [
         ActionButton(m, "approve", "Approve and send statement", "mdi:send-check", m.async_approve),
+        ActionButton(m, "handed_over", "Mark statement as handed over", "mdi:hand-extended-outline", m.async_mark_handed_over),
         ActionButton(m, "discard", "Discard pending statement", "mdi:file-cancel-outline", m.async_discard),
         ActionButton(m, "preview", "Preview this period", "mdi:file-eye-outline", m.async_preview),
         ActionButton(m, "custom", "Create custom statement", "mdi:calendar-range", custom),

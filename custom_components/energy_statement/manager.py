@@ -33,6 +33,7 @@ from .const import (
     KIND_GAS,
     KIND_NAMES,
     MODE_AUTO,
+    MODE_MANUAL,
     OPT_EMAIL,
     OPT_PAYMENT,
     OPT_PEOPLE,
@@ -115,6 +116,17 @@ class StatementManager:
     def email(self) -> dict[str, Any]:
         return self.opts.get(OPT_EMAIL, {})
 
+    def missing_setup(self) -> list[str]:
+        """Details still needed before a statement can be emailed."""
+        missing: list[str] = []
+        if self.schedule.get("sending_mode") == MODE_MANUAL:
+            return missing
+        if not self.people.get("tenant_email"):
+            missing.append("tenant's email (People and property)")
+        if not self.email.get("smtp_host"):
+            missing.append("email sending (Email sending)")
+        return missing
+
     def manual_supplies(self) -> dict[str, dict]:
         return {k: v for k, v in self.supplies.items() if v.get("source") == SOURCE_MANUAL}
 
@@ -170,6 +182,19 @@ class StatementManager:
             self.inputs.setdefault(f"reading_date_{sid}", today)
             self.inputs.setdefault(f"reading_{sid}", None)
         await self._save()
+
+        if missing := self.missing_setup():
+            persistent_notification.async_create(
+                self.hass,
+                "Statements will be worked out as normal but can't be emailed until you add: "
+                + ", ".join(missing)
+                + ".\n\nGo to Settings → Devices and services → Energy Statement → Configure. "
+                "Payment details are optional but recommended.",
+                title=f"{self.entry.title}: finish setting up",
+                notification_id=self._nid("setup"),
+            )
+        else:
+            persistent_notification.async_dismiss(self.hass, self._nid("setup"))
 
         t = self.send_time
         self._unsubs.append(
@@ -514,7 +539,13 @@ class StatementManager:
         await self._write_pdf(statement)
         persistent_notification.async_dismiss(self.hass, self._nid("missing"))
 
-        if self.schedule.get("sending_mode", MODE_AUTO) == MODE_AUTO:
+        if self.schedule.get("sending_mode") == MODE_MANUAL:
+            await self._finalise(statement, "to hand over")
+            await self._notify_print(statement)
+            return
+        if missing := self.missing_setup():
+            statement["error"] = "Not set up for email yet. Add: " + ", ".join(missing) + "."
+        elif self.schedule.get("sending_mode", MODE_AUTO) == MODE_AUTO:
             try:
                 await self._send(statement)
                 return
@@ -569,6 +600,10 @@ class StatementManager:
             pending = self.data.get("pending")
             if not pending or pending["status"] != STATUS_APPROVAL:
                 raise HomeAssistantError("There's no statement waiting for approval.")
+            if missing := self.missing_setup():
+                raise HomeAssistantError(
+                    "Can't send yet. Add these in Configure first: " + ", ".join(missing) + "."
+                )
             statement = pending["statement"]
             statement.pop("error", None)
             self._date_statement(statement)
@@ -578,6 +613,30 @@ class StatementManager:
             except MailError as err:
                 await self._save()
                 raise HomeAssistantError(f"Statement not sent. {err}") from err
+
+    async def async_mark_handed_over(self) -> None:
+        """Close a waiting statement without emailing it (printed instead)."""
+        async with self._lock:
+            pending = self.data.get("pending")
+            if not pending or pending["status"] != STATUS_APPROVAL:
+                raise HomeAssistantError("There's no finished statement waiting to be sent.")
+            statement = pending["statement"]
+            statement.pop("error", None)
+            await self._finalise(statement, "handed over")
+            persistent_notification.async_dismiss(self.hass, self._nid("approval"))
+
+    async def _notify_print(self, statement: dict) -> None:
+        link = self.pdf_link(statement["pdf"])
+        period = fmt_range(date.fromisoformat(statement["start"]), date.fromisoformat(statement["end"]))
+        title = f"{self.entry.title}: statement ready to print"
+        body = f"{statement['reference']} for {period}: {fmt_money(statement['total'])}."
+        persistent_notification.async_create(
+            self.hass,
+            body + f"\n\n[Open the PDF to print]({link})",
+            title=title,
+            notification_id=self._nid("print"),
+        )
+        await self._mobile(title, body + " Tap to open the PDF.", "print", url=link)
 
     async def async_discard(self) -> None:
         async with self._lock:
@@ -730,7 +789,8 @@ class StatementManager:
         )
         persistent_notification.async_create(
             self.hass,
-            body + f"\n\n[Open the PDF]({link})\n\nUse the *Approve and send* or *Discard* buttons on the device page.",
+            body + f"\n\n[Open the PDF]({link})\n\nOn the device page: *Approve and send* to email it, "
+            "*Mark as handed over* if you've printed it instead, or *Discard*.",
             title=title,
             notification_id=self._nid("approval"),
         )
