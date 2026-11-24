@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import smtplib
+import socket
 import ssl
 from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
@@ -10,6 +11,41 @@ from email.utils import formataddr, make_msgid
 from .const import SECURITY_NONE, SECURITY_SSL, SECURITY_STARTTLS
 
 TIMEOUT = 30
+
+
+def _connect_ipv4_first(host: str, port: int, timeout: float, source_address=None) -> socket.socket:
+    """Open a TCP connection, trying IPv4 addresses before IPv6.
+
+    Some home networks have IPv6 routes that break encrypted mail traffic
+    (connections to Gmail/Outlook drop as soon as TLS starts), so IPv4 goes
+    first. IPv6 is still used when a server has no IPv4 address.
+    """
+    infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    infos.sort(key=lambda info: 0 if info[0] == socket.AF_INET else 1)
+    last_error: OSError | None = None
+    for family, kind, proto, _, address in infos:
+        sock = socket.socket(family, kind, proto)
+        sock.settimeout(timeout)
+        try:
+            if source_address:
+                sock.bind(source_address)
+            sock.connect(address)
+            return sock
+        except OSError as err:
+            last_error = err
+            sock.close()
+    raise last_error or OSError(f"Couldn't find an address for {host}")
+
+
+class _SMTP(smtplib.SMTP):
+    def _get_socket(self, host, port, timeout):
+        return _connect_ipv4_first(host, port, timeout, self.source_address)
+
+
+class _SMTP_SSL(smtplib.SMTP_SSL):
+    def _get_socket(self, host, port, timeout):
+        sock = _connect_ipv4_first(host, port, timeout, self.source_address)
+        return self.context.wrap_socket(sock, server_hostname=self._host)
 
 
 class MailError(Exception):
@@ -23,9 +59,9 @@ def _connect(cfg: dict) -> smtplib.SMTP:
     context = ssl.create_default_context()
     try:
         if security == SECURITY_SSL:
-            server: smtplib.SMTP = smtplib.SMTP_SSL(host, port, timeout=TIMEOUT, context=context)
+            server: smtplib.SMTP = _SMTP_SSL(host, port, timeout=TIMEOUT, context=context)
         else:
-            server = smtplib.SMTP(host, port, timeout=TIMEOUT)
+            server = _SMTP(host, port, timeout=TIMEOUT)
             server.ehlo()
             if security == SECURITY_STARTTLS:
                 server.starttls(context=context)
