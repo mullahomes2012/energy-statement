@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import smtplib
 import socket
 import ssl
@@ -11,6 +12,7 @@ from email.utils import formataddr, make_msgid
 from .const import SECURITY_NONE, SECURITY_SSL, SECURITY_STARTTLS
 
 TIMEOUT = 30
+_LOGGER = logging.getLogger(__name__)
 
 
 def _connect_ipv4_first(host: str, port: int, timeout: float, source_address=None) -> socket.socket:
@@ -50,6 +52,9 @@ def lookup_dns_over_https(host: str) -> list[str]:
 
     name = urllib.parse.quote(host.strip().rstrip("."))
     for url in (
+        # By IP first: filters that redirect mail servers often block these names too.
+        f"https://1.1.1.1/dns-query?name={name}&type=A",
+        f"https://8.8.8.8/resolve?name={name}&type=A",
         f"https://cloudflare-dns.com/dns-query?name={name}&type=A",
         f"https://dns.google/resolve?name={name}&type=A",
     ):
@@ -60,7 +65,8 @@ def lookup_dns_over_https(host: str) -> list[str]:
             addresses = [a["data"] for a in data.get("Answer", []) if a.get("type") == 1]
             if addresses:
                 return addresses
-        except (OSError, ValueError):
+        except (OSError, ValueError) as err:
+            _LOGGER.warning("DNS-over-HTTPS lookup via %s failed: %s", url.split("/")[2], err)
             continue
     return []
 
@@ -182,14 +188,22 @@ def _connect(cfg: dict) -> smtplib.SMTP:
             if cfg.get("smtp_security", SECURITY_STARTTLS) == SECURITY_NONE:
                 raise
             addresses = lookup_dns_over_https(cfg["smtp_host"]) or None
+            _LOGGER.warning(
+                "Mail connection to %s was cut off (%s); retrying via %s",
+                cfg["smtp_host"], first, addresses or "normal DNS",
+            )
             attempts = [(addresses, False), (addresses, True)] if addresses else [(None, True)]
             error: Exception = first
             for addrs, no_sni in attempts:
                 try:
-                    return _open(cfg, addrs, no_sni)
+                    server = _open(cfg, addrs, no_sni)
+                    _LOGGER.warning("Mail connection worked with address=%s, no_sni=%s", addrs, no_sni)
+                    return server
                 except smtplib.SMTPAuthenticationError:
+                    _LOGGER.warning("Mail server reached with address=%s, no_sni=%s (login refused)", addrs, no_sni)
                     raise
                 except retryable as err:
+                    _LOGGER.warning("Retry with address=%s, no_sni=%s failed: %s", addrs, no_sni, err)
                     error = err
             raise error
     except smtplib.SMTPAuthenticationError as err:
